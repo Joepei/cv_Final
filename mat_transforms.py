@@ -48,7 +48,11 @@ def colouring(fs, fc_hat):
 Copyright (C) 2018 NVIDIA Corporation.    All rights reserved.
 Licensed under the CC BY-NC-SA 4.0 license (https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode).
 """
-def smoothen(content_path, stylized_path, lbda=1e-4):
+def smoothen(stylized_path, content_path, lbda=1e-4):
+    """
+    content_path: raw original content image pth
+    stylized_path: intermediate path 
+    """
     beta = 1./(1.+lbda)
     content = imageio.imread(content_path, pilmode='RGB')
 

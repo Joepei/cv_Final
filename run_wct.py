@@ -22,13 +22,13 @@ parser.add_argument('--content', type=str, default=None,
                     help='Content image path')
 parser.add_argument('--output', type=str, default='stylized.png',
                     help='Output image path')
-parser.add_argument('--smooth', help='Whether to apply smoothing')
+parser.add_argument('--smooth', type=str, help='apply gif smoothing or mat transform')
 
 args = parser.parse_args()
 
 
 def image_loader(loader, image_name):
-    img = Image.open(image_name)
+    img = Image.open(image_name).convert("RGB")
     h, w, c = np.array(img).shape
     h = (h//8)*8
     w = (w//8)*8
@@ -95,8 +95,15 @@ new_image = torch.transpose(new_image, 1, 2) # (H, W, C)
 new_image = np.maximum(np.minimum(new_image.cpu().detach().numpy(), 1.0), 0.0)
 
 result = Image.fromarray((new_image * 255).astype(np.uint8))
-result.save(args.output)
+result.save(args.output + '.png')
 
-if args.smooth and args.smooth == "True":
-    result = mat_transforms.smoothen(args.content, args.output)
-    result.save(args.output+"_smooth.png")
+if args.smooth and args.smooth == "mat":
+    result = mat_transforms.smoothen(args.output+".png", args.content)
+    result.save(args.output+"_smooth_mat.png")
+elif args.smooth and args.smooth == "gif":
+    from photo_gif import GIFSmoothing
+
+    p_pro = GIFSmoothing(r=35, eps=0.001)
+    result = p_pro.process(args.output+".png", args.content)
+    result.save(args.output+"_smooth_gif.png")
+

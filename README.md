@@ -1,9 +1,9 @@
 # PhotoWCT with closed form matting
-**NOTE: TO BE UPDATED**
 
-Torch implementation of the papers [Universal Style Transfer](https://arxiv.org/pdf/1705.08086.pdf) and [A Closed-form Solution to Photorealistic Image Stylization](https://arxiv.org/abs/1802.06474)
+Simplified Torch implementation of the papers [Universal Style Transfer](https://arxiv.org/pdf/1705.08086.pdf) and [A Closed-form Solution to Photorealistic Image Stylization](https://arxiv.org/abs/1802.06474)
 
-This is an unofficial implementation.
+This is an unofficial implementation and it is heavily relied on [Photo WCT](https://github.com/vidursatija/PhotoWCT)
+
 The original implementation of [Universal Style Transfer](https://github.com/Yijunmaverick/UniversalStyleTransfer) and [A Closed-form Solution to Photorealistic Image Stylization](https://github.com/NVIDIA/FastPhotoStyle) are there <-
 
 ## How to run it
@@ -18,13 +18,3 @@ The original implementation of [Universal Style Transfer](https://github.com/Yij
 ```python3 --x <layer number> --batch_size <64> --decoder <saved checkpoint if any> --optimizer <optimized checkpoint if any>```
 *Note: all decoders & optimizers are saved in the dir `decoder_<x>`*
 
-## Results
-Clockwise from top left: image, style, whitening+coloring, whitening+coloring+smoothing
-
-![Style Transfer on Golden Gate bridge](./golden_github.jpg)
-![Style Transfer on an MIT building](./mit1_github.jpg)
-![Style Transfer on another MIT building](./mit2_github.jpg)
-
-## TODO
-1. Make training easier
-2. Make running easier
