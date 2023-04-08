@@ -30,15 +30,32 @@ class GIFSmoothing(nn.Module):
         '''
         if type(initImg) == str:
             init_img = cv2.imread(initImg)
+            #print(init_img.shape)
             # init_img = init_img[2:-2,2:-2,:]
         else:
             init_img = np.array(initImg)[:, :, ::-1].copy()
         
         if type(contentImg) == str:
             cont_img = cv2.imread(contentImg)
-            cont_img = cont_img[1:-1, 3:-3, :]
+            #cont_img = cont_img[1:-1, :, :]
+            #print(cont_img.shape)
         else:
             cont_img = np.array(contentImg)[:, :, ::-1].copy()
+
+        lc, hc, _ = cont_img.shape
+        #print(lc, hc)
+        li, hi, _ = init_img.shape
+        #print(li, hi)
+        if lc > li: 
+            cont_img = cont_img[int(np.floor((lc-li)/2)):int(-np.ceil((lc-li)/2)),:,:]
+        if lc < li: 
+            init_img = init_img[int(np.floor((li-lc)/2)):int(-np.ceil((li-lc)/2)),:,:]
+        if hc > hi:
+            cont_img = cont_img[:,int(np.floor((hc-hi)/2)):int(-np.ceil((hc-hi)/2)),:]
+        if hc < hi: 
+            #print(int(np.floor((hi-hc)/2)))
+            #print(int(-np.ceil((hi-hc)/2)))
+            init_img = init_img[:,int(np.floor((hi-hc)/2)):int(-np.ceil((hi-hc)/2)),:]
         print(cont_img.shape, init_img.shape)
         output_img = guidedFilter(guide=cont_img, src=init_img, radius=self.r, eps=self.eps)
         output_img = cv2.cvtColor(output_img, cv2.COLOR_BGR2RGB)

@@ -102,7 +102,6 @@ if args.smooth and args.smooth == "mat":
     result.save(args.output+"_smooth_mat.png")
 elif args.smooth and args.smooth == "gif":
     from photo_gif import GIFSmoothing
-
     p_pro = GIFSmoothing(r=35, eps=0.001)
     result = p_pro.process(args.output+".png", args.content)
     result.save(args.output+"_smooth_gif.png")
