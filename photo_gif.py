@@ -8,6 +8,7 @@ from torch import nn
 import numpy as np
 import cv2
 from cv2.ximgproc import guidedFilter
+from util import resize
 
 
 class GIFSmoothing(nn.Module):
@@ -36,9 +37,12 @@ class GIFSmoothing(nn.Module):
         
         if type(contentImg) == str:
             cont_img = cv2.imread(contentImg)
-            cont_img = cont_img[1:-1, 3:-3, :]
+            # cont_img = cont_img[1:-1, 3:-3, :]
         else:
             cont_img = np.array(contentImg)[:, :, ::-1].copy()
+       
+        cont_img, init_img = resize(cont_img, init_img)
+
         print(cont_img.shape, init_img.shape)
         output_img = guidedFilter(guide=cont_img, src=init_img, radius=self.r, eps=self.eps)
         output_img = cv2.cvtColor(output_img, cv2.COLOR_BGR2RGB)

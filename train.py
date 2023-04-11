@@ -20,6 +20,10 @@ parser.add_argument('--x', type=int, default=1,
                     help='Number of VGG16 layers to use')
 parser.add_argument('--batch_size', type=int, default=64,
                     help='Number of VGG16 layers to use')
+parser.add_argument('--save_path', type=str, default="decoder_",
+                    help='saved decoder path loc')
+parser.add_argument('--epoch', type=int, default=2,
+                    help='number of epoches')
 
 args = parser.parse_args()
 
@@ -30,18 +34,15 @@ transform = transforms.Compose(
      transforms.Normalize(mean=[0.485, 0.456, 0.406],
                           std=[0.229, 0.224, 0.225])])
 
-trainset = torchvision.datasets.CocoDetection(root='./train2017', annFile="./annotations_trainval2017/annotations/instances_train2017.json",
+trainset = torchvision.datasets.CocoDetection(root='./train2017', annFile="./annotations_trainval2017/instances_train2017.json",
                                               transform=transform)
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
-                                          shuffle=True, num_workers=12)
+                                          shuffle=True, num_workers=12, collate_fn=lambda x: x )
 
-testset = torchvision.datasets.CocoDetection(root='./val2017', annFile="./annotations_trainval2017/annotations/instances_val2017.json",
+valset = torchvision.datasets.CocoDetection(root='./val2017', annFile="./annotations_trainval2017/instances_val2017.json",
                                              transform=transform)
-testloader = torch.utils.data.DataLoader(testset, batch_size=args.batch_size,
-                                         shuffle=False, num_workers=12)
-
-# dataiter = iter(trainloader)
-# images, _ = dataiter.next()
+valloader = torch.utils.data.DataLoader(valset, batch_size=args.batch_size,
+                                         shuffle=False, num_workers=12, collate_fn=lambda x: x )
 
 num_layers = args.x
 
@@ -64,15 +65,15 @@ if args.optimizer:
 z_loss = 0.01
 
 step = 0
-for epoch in range(2):  # loop over the dataset multiple times
+for epoch in range(args.epoch):  # loop over the dataset multiple times
 
     running_loss = 0.0
     i = 0
     for data in tqdm(trainloader):
-        # get the inputs; data is a list of [inputs, labels]
+        # get the inputs; data is a list of tuple(inputs, labels)
         try:
-            inputs = data[0].to(device)
-
+            # shape: (64, 3, 224, 224)
+            inputs = torch.stack([d[0] for d in data], dim = 0).to(device)
             # zero the parameter gradients
             optimizer.zero_grad()
 
@@ -86,7 +87,7 @@ for epoch in range(2):  # loop over the dataset multiple times
             step += 1
         except Exception as e:
             print(e)
-            continue
+            break
 
         # print statistics
         running_loss += loss.item()
@@ -94,18 +95,20 @@ for epoch in range(2):  # loop over the dataset multiple times
             print('[%d, %5d] loss: %.7f' %
                   (epoch + 1, i + 1, running_loss / 400))
             running_loss = 0.0
-            torch.save(decoder.state_dict(), "decoder_"+str(num_layers)+"/dec_"+str(step)+".pkl")
-            torch.save(optimizer.state_dict(), "decoder_"+str(num_layers)+"/opt_"+str(step)+".pkl")
+            torch.save(decoder.state_dict(), args.save_path+"/dec_"+str(num_layers)+"_"+str(step)+".pkl")
+            torch.save(optimizer.state_dict(), args.save_path+"/opt_"+str(num_layers)+"_"+str(step)+".pkl")
         i += 1
 
-    torch.save(decoder.state_dict(), "decoder_"+str(num_layers)+"/dec_"+str(step)+".pkl")
-    torch.save(optimizer.state_dict(), "decoder_"+str(num_layers)+"/opt_"+str(step)+".pkl")
+    torch.save(decoder.state_dict(), args.save_path+"/dec_"+str(num_layers)+"_"+str(step)+".pkl")
+    torch.save(optimizer.state_dict(), args.save_path+"/opt_"+str(num_layers)+"_"+str(step)+".pkl")
     i = 0
     running_loss = 0.0
-    for data in tqdm(testloader):
+
+
+    for data in tqdm(valloader):
         # get the inputs; data is a list of [inputs, labels]
         try:
-            inputs = data[0].to(device)
+            inputs = torch.stack([d[0] for d in data], dim = 0).to(device)
 
             # zero the parameter gradients
             # optimizer.zero_grad()

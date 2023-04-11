@@ -2,3 +2,14 @@ __pycache__/
 datasets/
 vgg16-397923af.pth
 outputs/
+annotations_trainval2017/
+train2017/
+test2017/
+val2017/
+examples/
+
+*.zip
+*.out
+decoder_*
+
+
