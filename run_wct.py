@@ -200,7 +200,7 @@ for j in range(args.x, 0, -1):
     z_content, maxpool_content = encoders[j-1](content_image) # (1, C, H, W)
     z_style, _ = encoders[j-1](style_image) # (1, C, H, W)
 
-    label_set, label_indicator = compute_label_info(content_seg, style_seg)
+    # label_set, label_indicator = compute_label_info(content_seg, style_seg)
     # feature_wct(cont_feat, style_feat, cont_seg, styl_seg)
     content_feat = z_content.squeeze(0)
     style_feat = z_style.squeeze(0)
