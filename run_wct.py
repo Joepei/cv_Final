@@ -209,16 +209,21 @@ style_seg = np.asarray(style_seg)
 if content_seg.ndim == 3:
     content_seg = np.asarray(content_seg[:ccw, :cch, -1])
     style_seg = np.asarray(style_seg[:ssw, :ssh, -1])
+else: 
+    content_seg = np.asarray(content_seg[:ccw, :cch])
+    style_seg = np.asarray(style_seg[:ssw, :ssh])
+
 
 
 # debugging purpose
+
 print(content_image.shape)
 print(content_seg.shape)
-print(content_seg)
+# print(content_seg)
 
 print(style_image.shape)
 print(style_seg.shape)
-print(style_seg)
+# print(style_seg)
 
 
 
