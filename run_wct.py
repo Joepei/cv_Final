@@ -78,6 +78,12 @@ def wct_core(cont_feat, styl_feat):
     # iden = iden.cuda()
     
     contentConv = torch.mm(cont_feat, cont_feat.t()).div(cFSize[1] - 1) + iden
+    # print(contentConv)
+    has_non_finite = torch.isnan(contentConv) | torch.isinf(contentConv)
+
+    # Replace non-finite values with a specified value (e.g., 0)
+    contentConv[has_non_finite] = 0.000001
+    
     # del iden
     c_u, c_e, c_v = torch.svd(contentConv, some=False)
     # c_e2, c_v = torch.eig(contentConv, True)
@@ -93,6 +99,10 @@ def wct_core(cont_feat, styl_feat):
     s_mean = torch.mean(styl_feat, 1)
     styl_feat = styl_feat - s_mean.unsqueeze(1).expand_as(styl_feat)
     styleConv = torch.mm(styl_feat, styl_feat.t()).div(sFSize[1] - 1)
+    has_non_finite = torch.isnan(styleConv) | torch.isinf(styleConv)
+    # Replace non-finite values with a specified value (e.g., 0)
+    styleConv[has_non_finite] = 0.000001
+    # print(styleConv)
     s_u, s_e, s_v = torch.svd(styleConv, some=False)
     
     k_s = sFSize[0]
@@ -182,17 +192,36 @@ def feature_wct(cont_feat, styl_feat, cont_seg, styl_seg, label_set, label_indic
     return ccsF
 
 
-
 content_image = image_loader(transform, args.content)
 style_image = image_loader(transform, args.style)
+_, _, ccw, cch = content_image.shape
+_, _, ssw, ssh = style_image.shape
 
-# content_seg = image_loader(transform, args.content_seg)
-# style_seg = image_loader(transform, args.style_seg)
+
+
 content_seg = Image.open(args.content_seg)
 content_seg = np.asarray(content_seg)
-
 style_seg = Image.open(args.style_seg)
 style_seg = np.asarray(style_seg)
+
+# the black and white segementation is werid 
+# the following code is for that mask
+if content_seg.ndim == 3:
+    content_seg = np.asarray(content_seg[:ccw, :cch, -1])
+    style_seg = np.asarray(style_seg[:ssw, :ssh, -1])
+
+
+# debugging purpose
+print(content_image.shape)
+print(content_seg.shape)
+print(content_seg)
+
+print(style_image.shape)
+print(style_seg.shape)
+print(style_seg)
+
+
+
 
 label_set, label_indicator = compute_label_info(content_seg, style_seg)
 
