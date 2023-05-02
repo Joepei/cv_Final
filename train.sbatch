@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#SBATCH --job-name=3cv_train
+#SBATCH --job-name=1cv_train
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --gres=gpu:1
@@ -8,7 +8,7 @@
 #SBATCH --mem=48GB
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=mc8895@nyu.edu
-#SBATCH --output=cvtrain3_new.out
+#SBATCH --output=cvtrain1_new.out
 
 module purge
 
@@ -17,6 +17,6 @@ singularity exec --nv\
 	    /scratch/work/public/singularity/cuda11.2.2-cudnn8-devel-ubuntu20.04.sif \
 	    /bin/bash -c "source /ext3/env.sh; conda activate pt2; \
         python train.py \
-            --x=3 \
+            --x=1 \
             --save_path=decoder_test2 \
             --epoch=5"

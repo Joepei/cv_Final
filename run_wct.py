@@ -6,7 +6,7 @@ import torchvision
 import torchvision.transforms as transforms
 from PIL import Image
 
-import custom_vgg16 as cvgg16
+from fast_vgg16 import VGGEncoder, VGGDecoder
 import mat_transforms
 
 import argparse
@@ -67,17 +67,25 @@ decoder_paths = args.decoder.split(",")
 # decoders = [cvgg16.vgg16_dec(x=j+1, pretrained=True, pretrained_path=decoder_paths[j]) for j in range(args.x)]
 encoders = []
 decoders = []
-for decoder_path in decoder:
+for i in range(args.x):
+    encoder = VGGEncoder(level=i+1)
+    encoder.load_state_dict(torch.load("vgg16-397923af.pth"), strict=False)
+    for p in encoder.parameters():
+            p.requires_grad = False
+            encoder.train(False)
+            encoder.eval()
+    encoder.to(device)
+    encoders.append(encoder)
     
-encoder = VGGEncoder(level=num_layers)
-encoder.load_state_dict(torch.load("vgg16-397923af.pth"), strict=False)
-for p in encoder.parameters():
+    decoder = VGGDecoder(level=i+1).to(device)
+    #load in saved decoder path
+    decoder.load_state_dict(torch.load(decoder_paths[i]))
+    for p in decoder.parameters():
         p.requires_grad = False
-        encoder.train(False)
-        encoder.eval()
-encoder.to(device)
-decoder = VGGDecoder(level=num_layers).to(device)
-decoder.load_state_dict(torch.load(decoder_paths))
+        decoder.train(False)
+        decoder.eval()
+    decoder.to(device)
+    decoders.append(decoder)
 
 def wct_core(cont_feat, styl_feat):
     cFSize = cont_feat.size()
@@ -203,8 +211,8 @@ def feature_wct(cont_feat, styl_feat, cont_seg, styl_seg, label_set, label_indic
     return ccsF
 
 
-content_image = image_loader(transform, args.content)
-style_image = image_loader(transform, args.style)
+content_image = image_loader(transform, args.content).to(device)
+style_image = image_loader(transform, args.style).to(device)
 _, _, ccw, cch = content_image.shape
 _, _, ssw, ssh = style_image.shape
 
@@ -224,8 +232,7 @@ else:
     content_seg = np.asarray(content_seg[:ccw, :cch])
     style_seg = np.asarray(style_seg[:ssw, :ssh])
 
-
-
+# style_seg
 # debugging purpose
 
 print(content_image.shape)
@@ -237,20 +244,22 @@ print(style_seg.shape)
 # print(style_seg)
 
 
-
-
 label_set, label_indicator = compute_label_info(content_seg, style_seg)
 
-for j in range(args.x, 0, -1):
-    z_content, maxpool_content = encoders[j-1](content_image) # (1, C, H, W)
-    z_style, _ = encoders[j-1](style_image) # (1, C, H, W)
+#output encoded matrix for encoder (layer=4) for style image
+sF4, sF3, sF2, sF1 = encoders[-1].forward_multiple(style_images)
+style_Fs = [sF4, sF3, sF2, sF1]
 
+for j in range(args.x, 0, -1):
+    cF, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3 = encoders[j-1](content_image) # (1, C, H, W)
+    # z_style, _ = encoders[j-1](style_image) # (1, C, H, W)
+    sF = style_Fs[j-1]
     # label_set, label_indicator = compute_label_info(content_seg, style_seg)
     # feature_wct(cont_feat, style_feat, cont_seg, styl_seg)
-    content_feat = z_content.squeeze(0)
-    style_feat = z_style.squeeze(0)
+    content_feat = cF.squeeze(0)
+    style_feat = sF.squeeze(0)
     ccsF = feature_wct(content_feat, style_feat, content_seg, style_seg, label_set, label_indicator)
-    content_image = decoders[j-1](ccsF, maxpool_content) # (1, C, H, W)
+    content_image = decoders[j-1](ccsF, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3) # (1, C, H, W)
 
     # n_channels = z_content.size()[1] # C
     # n_1 = z_content.size()[2] # H
