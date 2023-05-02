@@ -16,7 +16,7 @@ def whitening(fc):
 
     covar = torch.matmul(fc, torch.transpose(fc, 0, 1)) # [C, C]
 
-    eigenvalues, Ec = torch.linalg.eigh(covar) # np.linalg.eigh(covar) # ([C], [C, C])
+    eigenvalues, Ec = torch.symeig(covar, eigenvectors=True)# np.linalg.eigh(covar) # ([C], [C, C])
 
     eigenvalues = torch.pow(eigenvalues, -0.5)
     Dc = torch.diag(eigenvalues) # [C, C]
@@ -33,7 +33,7 @@ def colouring(fs, fc_hat):
 
     covar = torch.matmul(fs, torch.transpose(fs, 0, 1)) # [C, C]
 
-    eigenvalues, Es = torch.linalg.eigh(covar) # ([C], [C, C])
+    eigenvalues, Es = torch.symeig(covar, eigenvectors=True)# ([C], [C, C])
 
     eigenvalues = torch.pow(eigenvalues, 0.5)
     Dc = torch.diag(eigenvalues) # [C, C]

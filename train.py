@@ -6,10 +6,12 @@ import torchvision
 import torchvision.transforms as transforms
 import torch.optim as optim
 
-import custom_vgg16 as cvgg16
+# import custom_vgg16 as cvgg16
+from fast_vgg16 import VGGEncoder, VGGDecoder
 from tqdm import tqdm
 
 import argparse
+# import perceptual_loss
 
 parser = argparse.ArgumentParser(description='Process some integers.')
 parser.add_argument('--decoder', type=str, default=None,
@@ -38,11 +40,15 @@ trainset = torchvision.datasets.CocoDetection(root='./train2017', annFile="./ann
                                               transform=transform)
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
                                           shuffle=True, num_workers=12, collate_fn=lambda x: x )
-
+num_batches = len(trainloader)
+print(f"train loader num batches {num_batches}")
 valset = torchvision.datasets.CocoDetection(root='./val2017', annFile="./annotations_trainval2017/instances_val2017.json",
                                              transform=transform)
 valloader = torch.utils.data.DataLoader(valset, batch_size=args.batch_size,
                                          shuffle=False, num_workers=12, collate_fn=lambda x: x )
+
+num_batches = len(valloader)
+print(f"val loader num batches {num_batches}")
 
 num_layers = args.x
 
@@ -52,13 +58,21 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 print(device)
 
-encoder = cvgg16.vgg16_enc(x=num_layers, pretrained=True).to(device)
-if args.decoder:
-    decoder = cvgg16.vgg16_dec(x=num_layers, pretrained=True, pretrained_path=args.decoder).to(device)
-else:
-    decoder = cvgg16.vgg16_dec(x=num_layers, pretrained=False).to(device)
+#encoder is pertrained
+encoder = VGGEncoder(level=num_layers)
+encoder.load_state_dict(torch.load("vgg16-397923af.pth"), strict=False)
+for p in encoder.parameters():
+        p.requires_grad = False
+        encoder.train(False)
+        encoder.eval()
+encoder.to(device)
 
+decoder = VGGDecoder(level=num_layers).to(device)
+
+print(encoder)
+print(decoder)
 criterion = nn.MSELoss().to(device)
+# criterion_perceptual = perceptual_loss.VGGPerceptualLoss()
 optimizer = optim.Adam(decoder.parameters(), lr=0.0001) # .to(device)
 if args.optimizer:
     optimizer.load_state_dict(torch.load(args.optimizer))
@@ -78,10 +92,15 @@ for epoch in range(args.epoch):  # loop over the dataset multiple times
             optimizer.zero_grad()
 
             # forward + backward + optimize
-            z, maxpool = encoder(inputs)
-            inputs_hat = decoder(z.to(device), maxpool)
-            z_hat, _ = encoder(inputs_hat.to(device))
-            loss = (criterion(inputs_hat, inputs) + z_loss*criterion(z_hat, z))/(1+z_loss)
+
+            cF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3  = encoder(inputs)
+            out = decoder(cF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3)
+            cF4_hat, _, _, _, _, _, _ = encoder(out)
+
+            reconstruction_loss = (criterion(out, inputs) + z_loss*criterion(cF4_hat, cF4))/(1+z_loss)
+            perceptual_loss = 0
+            loss = perceptual_loss + reconstruction_loss
+
             loss.backward()
             optimizer.step()
             step += 1
@@ -91,7 +110,7 @@ for epoch in range(args.epoch):  # loop over the dataset multiple times
 
         # print statistics
         running_loss += loss.item()
-        if i % 400 == 399:    # print every 2000 mini-batches
+        if i % 400 == 0:    # print every 2000 mini-batches
             print('[%d, %5d] loss: %.7f' %
                   (epoch + 1, i + 1, running_loss / 400))
             running_loss = 0.0
@@ -107,6 +126,7 @@ for epoch in range(args.epoch):  # loop over the dataset multiple times
 
     for data in tqdm(valloader):
         # get the inputs; data is a list of [inputs, labels]
+
         try:
             inputs = torch.stack([d[0] for d in data], dim = 0).to(device)
 
@@ -114,10 +134,13 @@ for epoch in range(args.epoch):  # loop over the dataset multiple times
             # optimizer.zero_grad()
 
             # forward + backward + optimize
-            z, maxpool = encoder(inputs)
-            inputs_hat = decoder(z.to(device), maxpool)
-            z_hat, _ = encoder(inputs_hat.to(device))
-            loss = criterion(inputs_hat, inputs) + 0.01*criterion(z_hat, z)
+            # z, maxpool = encoder(inputs)
+            # inputs_hat = decoder(z.to(device), maxpool)
+            # z_hat, _ = encoder(inputs_hat.to(device))
+            cF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3  = encoder(inputs)
+            out = decoder(cF4, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3)
+            cF4_hat, _, _, _, _, _, _ = encoder(out)
+            loss = criterion(out, inputs) + 0.01*criterion(cF4_hat, cF4)
             # loss.backward()
             # optimizer.step()
         except Exception as e:

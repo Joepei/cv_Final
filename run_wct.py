@@ -63,10 +63,21 @@ print(device)
 
 decoder_paths = args.decoder.split(",")
 
-encoders = [cvgg16.vgg16_enc(x=j+1, pretrained=True) for j in range(args.x)]
-decoders = [cvgg16.vgg16_dec(x=j+1, pretrained=True, pretrained_path=decoder_paths[j]) for j in range(args.x)]
-# encoder = cvgg16.vgg16_enc(x=args.x, pretrained=True)
-# decoder = cvgg16.vgg16_dec(x=args.x, pretrained=True, pretrained_path=args.decoder)
+# encoders = [cvgg16.vgg16_enc(x=j+1, pretrained=True) for j in range(args.x)]
+# decoders = [cvgg16.vgg16_dec(x=j+1, pretrained=True, pretrained_path=decoder_paths[j]) for j in range(args.x)]
+encoders = []
+decoders = []
+for decoder_path in decoder:
+    
+encoder = VGGEncoder(level=num_layers)
+encoder.load_state_dict(torch.load("vgg16-397923af.pth"), strict=False)
+for p in encoder.parameters():
+        p.requires_grad = False
+        encoder.train(False)
+        encoder.eval()
+encoder.to(device)
+decoder = VGGDecoder(level=num_layers).to(device)
+decoder.load_state_dict(torch.load(decoder_paths))
 
 def wct_core(cont_feat, styl_feat):
     cFSize = cont_feat.size()

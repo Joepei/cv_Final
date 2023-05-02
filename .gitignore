@@ -7,6 +7,8 @@ train2017/
 test2017/
 val2017/
 examples/
+figs/
+figs2/
 
 *.zip
 *.out
@@ -15,3 +17,6 @@ decoder_*
 stylized.png.png
 stylized.png_smooth_gif.png
 stylized.png_smooth_mat.png
+train.sbatch
+
+perceptual_loss.py
