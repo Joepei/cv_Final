@@ -95,21 +95,23 @@ for i in range(args.x):
     decoder.to(device)
     decoders.append(decoder)
 
-def compute_label_info(cont_seg, styl_seg):
-    if cont_seg.size == False or styl_seg.size == False:
+
+def compute_label_info(content_segment, style_segment):
+    if not content_segment.size or not style_segment.size:
         return None, None
-    # print('content seg size', cont_seg)
-    max_label = np.max(cont_seg) + 1
-    label_set = np.unique(cont_seg)
+    max_label = np.max(content_segment) + 1
+    label_set = np.unique(content_segment)
     label_indicator = np.zeros(max_label)
     for l in label_set:
-        # if l==0:
-        #   continue
-        is_valid = lambda a, b: a > 10 and b > 10 and a / b < 100 and b / a < 100
-        o_cont_mask = np.where(cont_seg.reshape(cont_seg.shape[0] * cont_seg.shape[1]) == l)
-        o_styl_mask = np.where(styl_seg.reshape(styl_seg.shape[0] * styl_seg.shape[1]) == l)
-        label_indicator[l] = is_valid(o_cont_mask[0].size, o_styl_mask[0].size)
-    
+        content_mask = np.where(content_segment.reshape(content_segment.shape[0] * content_segment.shape[1]) == l)
+        style_mask = np.where(style_segment.reshape(style_segment.shape[0] * style_segment.shape[1]) == l)
+
+        c_size = content_mask[0].size
+        s_size = style_mask[0].size
+        if c_size > 10 and s_size > 10 and c_size / s_size < 100 and s_size / c_size < 100:
+            label_indicator[l] = True
+        else:
+            label_indicator[l] = False
     return label_set, label_indicator
 
 
@@ -166,6 +168,52 @@ def __wct_core(cont_feat, styl_feat):
     targetFeature = targetFeature + s_mean.unsqueeze(1).expand_as(targetFeature)
     return targetFeature
 
+def __wct_core_segment(content_feat, style_feat, content_segment, style_segment,
+                     label_set, label_indicator, weight=1, registers=None,
+                     device='cpu'):
+    def resize(feat, target):
+        size = (target.size(2), target.size(1))
+        if len(feat.shape) == 2:
+            return np.asarray(Image.fromarray(feat).resize(size, Image.NEAREST))
+        else:
+            return np.asarray(Image.fromarray(feat, mode='RGB').resize(size, Image.NEAREST))
+
+    def get_index(feat, label):
+        mask = np.where(feat.reshape(feat.shape[0] * feat.shape[1]) == label)
+        if mask[0].size <= 0:
+            return None
+        return torch.LongTensor(mask[0]).to(device)
+
+    squeeze_content_feat = content_feat.squeeze(0)
+    squeeze_style_feat = style_feat.squeeze(0)
+
+    content_feat_view = squeeze_content_feat.view(squeeze_content_feat.size(0), -1).clone()
+    style_feat_view = squeeze_style_feat.view(squeeze_style_feat.size(0), -1).clone()
+
+    resized_content_segment = resize(content_segment, squeeze_content_feat)
+    resized_style_segment = resize(style_segment, squeeze_style_feat)
+
+    target_feature = content_feat_view.clone()
+    for label in label_set:
+        if not label_indicator[label]:
+            continue
+        content_index = get_index(resized_content_segment, label)
+        style_index = get_index(resized_style_segment, label)
+        if content_index is None or style_index is None:
+            continue
+        masked_content_feat = torch.index_select(content_feat_view, 1, content_index)
+        masked_style_feat = torch.index_select(style_feat_view, 1, style_index)
+        _target_feature = __wct_core(masked_content_feat, masked_style_feat)
+        if torch.__version__ >= '0.4.0':
+            # XXX reported bug in the original repository
+            new_target_feature = torch.transpose(target_feature, 1, 0)
+            new_target_feature.index_copy_(0, content_index,
+                                           torch.transpose(_target_feature, 1, 0))
+            target_feature = torch.transpose(new_target_feature, 1, 0)
+        else:
+            target_feature.index_copy_(1, content_index, _target_feature)
+    return target_feature
+
 def __feature_wct(cont_feat, styl_feat, cont_seg, styl_seg, label_set, label_indicator):
     cont_c, cont_h, cont_w = cont_feat.size(0), cont_feat.size(1), cont_feat.size(2)
     styl_c, styl_h, styl_w = styl_feat.size(0), styl_feat.size(1), styl_feat.size(2)
@@ -175,44 +223,8 @@ def __feature_wct(cont_feat, styl_feat, cont_seg, styl_seg, label_set, label_ind
     if cont_seg.size == False or styl_seg.size == False:
         target_feature = __wct_core(cont_feat_view, styl_feat_view)
     else:
-        target_feature = cont_feat.view(cont_c, -1).clone()
-        if len(cont_seg.shape) == 2:
-            t_cont_seg = np.asarray(Image.fromarray(cont_seg).resize((cont_w, cont_h), Image.NEAREST))
-        else:
-            t_cont_seg = np.asarray(Image.fromarray(cont_seg, mode='RGB').resize((cont_w, cont_h), Image.NEAREST))
-        if len(styl_seg.shape) == 2:
-            t_styl_seg = np.asarray(Image.fromarray(styl_seg).resize((styl_w, styl_h), Image.NEAREST))
-        else:
-            t_styl_seg = np.asarray(Image.fromarray(styl_seg, mode='RGB').resize((styl_w, styl_h), Image.NEAREST))
-
-        for l in label_set:
-            if label_indicator[l] == 0:
-                continue
-            cont_mask = np.where(t_cont_seg.reshape(t_cont_seg.shape[0] * t_cont_seg.shape[1]) == l)
-            styl_mask = np.where(t_styl_seg.reshape(t_styl_seg.shape[0] * t_styl_seg.shape[1]) == l)
-            if cont_mask[0].size <= 0 or styl_mask[0].size <= 0:
-                continue
-
-            cont_indi = torch.LongTensor(cont_mask[0])
-            styl_indi = torch.LongTensor(styl_mask[0])
-            # if self.is_cuda:
-            cont_indi = cont_indi.cuda(0)
-            styl_indi = styl_indi.cuda(0)
-
-            cFFG = torch.index_select(cont_feat_view, 1, cont_indi)
-            sFFG = torch.index_select(styl_feat_view, 1, styl_indi)
-            # print(len(cont_indi))
-            # print(len(styl_indi))
-            tmp_target_feature = __wct_core(cFFG, sFFG)
-            # print(tmp_target_feature.size())
-            if torch.__version__ >= "0.4.0":
-                # This seems to be a bug in PyTorch 0.4.0 to me.
-                new_target_feature = torch.transpose(target_feature, 1, 0)
-                new_target_feature.index_copy_(0, cont_indi, \
-                        torch.transpose(tmp_target_feature,1,0))
-                target_feature = torch.transpose(new_target_feature, 1, 0)
-            else:
-                target_feature.index_copy_(1, cont_indi, tmp_target_feature)
+        target_feature = __wct_core_segment(cont_feat, styl_feat, cont_seg, styl_seg,
+                                          label_set, label_indicator, weight=1, registers=None, device=device)
 
     target_feature = target_feature.view_as(cont_feat)
     ccsF = target_feature.float().unsqueeze(0)
@@ -224,41 +236,73 @@ style_image = image_loader(transform, args.style)
 _, _, ccw, cch = content_image.shape
 _, _, ssw, ssh = style_image.shape
 
-try:
-    content_seg = Image.open(args.content_seg)
-    content_seg = np.asarray(content_seg)
-    style_seg = Image.open(args.style_seg)
-    style_seg = np.asarray(style_seg)
-    # the black and white segementation is werid 
-    # the following code is for that mask
-    if content_seg.ndim == 3:
-        content_seg = np.asarray(content_seg[:ccw, :cch, -1])
-        style_seg = np.asarray(style_seg[:ssw, :ssh, -1])
-    else: 
-        content_seg = np.asarray(content_seg[:ccw, :cch])
-        style_seg = np.asarray(style_seg[:ssw, :ssh])
-except:
-    content_seg = np.array([])
-    style_seg = np.array([])
+def change_seg(seg):
+    color_dict = {
+        (0, 0, 255): 3,  # blue
+        (0, 255, 0): 2,  # green
+        (0, 0, 0): 0,  # black
+        (255, 255, 255): 1,  # white
+        (255, 0, 0): 4,  # red
+        (255, 255, 0): 5,  # yellow
+        (128, 128, 128): 6,  # grey
+        (0, 255, 255): 7,  # lightblue
+        (255, 0, 255): 8  # purple
+    }
+    arr_seg = np.asarray(seg)
+    new_seg = np.zeros(arr_seg.shape[:-1])
+    for x in range(arr_seg.shape[0]):
+        for y in range(arr_seg.shape[1]):
+            if tuple(arr_seg[x, y, :]) in color_dict:
+                new_seg[x, y] = color_dict[tuple(arr_seg[x, y, :])]
+            else:
+                min_dist_index = 0
+                min_dist = 99999
+                for key in color_dict:
+                    dist = np.sum(np.abs(np.asarray(key) - arr_seg[x, y, :]))
+                    if dist < min_dist:
+                        min_dist = dist
+                        min_dist_index = color_dict[key]
+                    elif dist == min_dist:
+                        try:
+                            min_dist_index = new_seg[x, y-1, :]
+                        except Exception:
+                            pass
+                new_seg[x, y] = min_dist_index
+    return new_seg.astype(np.uint8)
+
+def load_segment(image_path, image_size=512):
+    if not image_path:
+        return np.asarray([])
+    image = Image.open(image_path)
+    if image_size is not None:
+        transform = transforms.Resize(image_size, interpolation=Image.NEAREST)
+        image = transform(image)
+    w, h = image.size
+    transform = transforms.CenterCrop((h // 16 * 16, w // 16 * 16))
+    image = transform(image)
+    if len(np.asarray(image).shape) == 3:
+        image = change_seg(image)
+    return np.asarray(image)
 
 
-# style_seg
-# debugging purpose
+content_seg = load_segment(args.content_seg)
+style_seg = load_segment(args.style_seg) 
+
 
 print(content_image.shape)
 print(content_seg.shape)
-# print(content_seg)
 
 print(style_image.shape)
 print(style_seg.shape)
-# print(style_seg)
 
 
 label_set, label_indicator = compute_label_info(content_seg, style_seg)
+print("label contnet")
+print(label_set)
+print(label_indicator)
 
 
 sF4, sF3, sF2, sF1 = encoders[-1].forward_multiple(style_image.to(device))
-# style_Fs = [sF1, sF2, sF3,sF4]
 
 for j in range(args.x, 0, -1):
     cF, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3 = encoders[j-1](content_image.to(device)) # (1, C, H, W)
