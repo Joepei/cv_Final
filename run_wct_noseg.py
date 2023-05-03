@@ -69,21 +69,21 @@ decoders = []
 # Testing for FastPhoto Style Official pth migration
 p_wct = PhotoWCT()
 p_wct.load_state_dict(torch.load('/scratch/mc8895/FastPhotoStyle/PhotoWCTModels/photo_wct.pth'))
-encoders_fast = [p_wct.e1.to(device), p_wct.e2.to(device), p_wct.e3.to(device), p_wct.e4.to(device)]
+encoders = [p_wct.e1.to(device), p_wct.e2.to(device), p_wct.e3.to(device), p_wct.e4.to(device)]
 decoders = [p_wct.d1.to(device), p_wct.d2.to(device), p_wct.d3.to(device), p_wct.d4.to(device)]
-for i in range(args.x):
-    encoder = VGGEncoder(level=i+1)
-    encoder.load_state_dict(torch.load("vgg19-dcbb9e9d.pth"), strict=False)
-    for p in encoder.parameters():
-            p.requires_grad = False
-            print(p.data)
-            encoder.train(False)
-            encoder.eval()
-            break
-    encoder.to(device)
-    encoders.append(encoder)
+# for i in range(args.x):
+#     encoder = VGGEncoder(level=i+1)
+#     encoder.load_state_dict(torch.load("vgg19-dcbb9e9d.pth"), strict=False)
+#     for p in encoder.parameters():
+#             p.requires_grad = False
+#             print(p.data)
+#             encoder.train(False)
+#             encoder.eval()
+#             break
+#     encoder.to(device)
+#     encoders.append(encoder)
     # print(encoder)
-    break
+
     
     # print(torch.load(decoder_paths[i]).keys())
     # decoder = VGGDecoder(level=i+1).to(device)

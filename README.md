@@ -8,7 +8,8 @@ The original implementation of [Universal Style Transfer](https://github.com/Yij
 
 ## How to run it
 1. Download the decoders from the directories
-2. ```python3 run_wct.py --x 4 --style <path to style> --content <path to content> --output <output file name> --decoder decoder_1/dec_gi1849.pkl,decoder_2/dec_1849.pkl,decoder_3/dec_1849.pkl,decoder_4/dec_1849.pkl --smooth gif```
+2. ```python3 run_wct_noseg.py --x 4 --style <path to style> --content <path to content> --output <output file name> --decoder decoder_1/dec_gi1849.pkl,decoder_2/dec_1849.pkl,decoder_3/dec_1849.pkl,decoder_4/dec_1849.pkl --smooth gif```
+    - note that run_wct_noseg can use FastPhotoStyle's official saved pth to transfer photo. Note to change the pth file location. 
 
 ## How to train it
 1. Get the 2017 MS COCO train and validation datasets and unzip them

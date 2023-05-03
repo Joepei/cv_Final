@@ -1,3 +1,6 @@
+import torch.nn as nn
+from fast_vgg16 import VGGEncoder, VGGDecoder
+
 class PhotoWCT(nn.Module):
     def __init__(self):
         super(PhotoWCT, self).__init__()

@@ -6,11 +6,11 @@ import torchvision
 import torchvision.transforms as transforms
 import torch.optim as optim
 
-# import custom_vgg16 as cvgg16
 from fast_vgg16 import VGGEncoder, VGGDecoder
 from tqdm import tqdm
 
 import argparse
+from model import PhotoWCT
 # import perceptual_loss
 
 parser = argparse.ArgumentParser(description='Process some integers.')
