@@ -22,4 +22,4 @@ train.sbatch
 perceptual_loss.py
 run_wct_origin.py
 
-output.png
+*.png

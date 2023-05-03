@@ -6,6 +6,7 @@ import torchvision
 import torchvision.transforms as transforms
 from PIL import Image
 
+from model import PhotoWCT
 from fast_vgg16 import VGGEncoder, VGGDecoder
 import mat_transforms
 
@@ -29,6 +30,8 @@ parser.add_argument('--content_seg', type=str, default=None,
 parser.add_argument('--output', type=str, default='stylized.png',
                     help='Output image path')
 parser.add_argument('--smooth', type=str, help='apply gif smoothing or mat transform')
+parser.add_argument('--encoder', type=int, help='options for encoders: 1: vgg-16 encoder; 2: FastphotoStyle encoder')
+
 
 args = parser.parse_args()
 
@@ -58,22 +61,27 @@ reverse_normalize = transforms.Normalize(
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # Assuming that we are on a CUDA machine, this should print a CUDA device:
-
 print(device)
 
 decoder_paths = args.decoder.split(",")
 
-# encoders = [cvgg16.vgg16_enc(x=j+1, pretrained=True) for j in range(args.x)]
-# decoders = [cvgg16.vgg16_dec(x=j+1, pretrained=True, pretrained_path=decoder_paths[j]) for j in range(args.x)]
 encoders = []
 decoders = []
+p_wct = PhotoWCT()
+p_wct.load_state_dict(torch.load('/scratch/mc8895/FastPhotoStyle/PhotoWCTModels/photo_wct.pth'))
+encoders_pwct = [p_wct.e1.to(device), p_wct.e2.to(device), p_wct.e3.to(device), p_wct.e4.to(device)]
+
 for i in range(args.x):
     encoder = VGGEncoder(level=i+1)
-    encoder.load_state_dict(torch.load("vgg16-397923af.pth"), strict=False)
+    if args.encoder == 1:
+        encoder.load_state_dict(torch.load("vgg16-397923af.pth"), strict=False)
+    if args.encoder == 2:
+        encoder = encoders_pwct[i]
     for p in encoder.parameters():
-            p.requires_grad = False
-            encoder.train(False)
-            encoder.eval()
+        p.requires_grad = False
+    
+    encoder.train(False)
+    encoder.eval()
     encoder.to(device)
     encoders.append(encoder)
     
@@ -246,9 +254,6 @@ print(style_seg.shape)
 
 label_set, label_indicator = compute_label_info(content_seg, style_seg)
 
-#output encoded matrix for encoder (layer=4) for style image
-# content_seg = torch.from_numpy(content_seg).float().to(device)
-# style_seg = torch.from_numpy(style_seg).float().to(device)
 
 sF4, sF3, sF2, sF1 = encoders[-1].forward_multiple(style_image.to(device))
 # style_Fs = [sF1, sF2, sF3,sF4]
@@ -257,9 +262,7 @@ for j in range(args.x, 0, -1):
     cF, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3 = encoders[j-1](content_image.to(device)) # (1, C, H, W)
     # z_style, _ = encoders[j-1](style_image) # (1, C, H, W)
     sF, _, _, _, _, _, _ = encoders[j-1](style_image.to(device))
-    # print(cF.shape, sF.shape)
-    # label_set, label_indicator = compute_label_info(content_seg, style_seg)
-    # feature_wct(cont_feat, style_feat, cont_seg, styl_seg)
+
     content_feat = cF.data.squeeze(0).to(device)
     # print(content_feat.shape)
     style_feat = sF.data.squeeze(0).to(device)
@@ -267,25 +270,6 @@ for j in range(args.x, 0, -1):
     ccsF = __feature_wct(content_feat, style_feat, content_seg, style_seg, label_set, label_indicator)
     content_image = decoders[j-1](ccsF, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3) # (1, C, H, W)
 
-    # n_channels = z_content.size()[1] # C
-    # n_1 = z_content.size()[2] # H
-    # n_2 = z_content.size()[3] # W
-
-    # z_content = z_content.squeeze(0).view([n_channels, -1]) # (C, HW)
-    # z_style = z_style.squeeze(0).view([n_channels, -1]) # (C, HW)
-
-    # white_content = mat_transforms.whitening(z_content) # (C, HW)
-    # color_content = mat_transforms.colouring(z_style, white_content) # (C, HW)
-
-    # alpha = 0.8
-    # color_content = alpha*color_content + (1.-alpha)*z_content
-
-    # color_content = color_content.view([1, n_channels, n_1, n_2]) # (1, C, H, W)
-
-
-    # color_content = color_content.unsqueeze(0) # (1, C, H, W)
-
-    # content_image = decoders[j-1](color_content, maxpool_content) # (1, C, H, W)
 
 new_image = content_image.squeeze(0) # (C, H, W)
 new_image = reverse_normalize(new_image) # (C, H, W)

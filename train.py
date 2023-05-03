@@ -39,13 +39,13 @@ transform = transforms.Compose(
 trainset = torchvision.datasets.CocoDetection(root='./train2017', annFile="./annotations_trainval2017/instances_train2017.json",
                                               transform=transform)
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=args.batch_size,
-                                          shuffle=True, num_workers=12, collate_fn=lambda x: x )
+                                          shuffle=True, num_workers=1, collate_fn=lambda x: x )
 num_batches = len(trainloader)
 print(f"train loader num batches {num_batches}")
 valset = torchvision.datasets.CocoDetection(root='./val2017', annFile="./annotations_trainval2017/instances_val2017.json",
                                              transform=transform)
 valloader = torch.utils.data.DataLoader(valset, batch_size=args.batch_size,
-                                         shuffle=False, num_workers=12, collate_fn=lambda x: x )
+                                         shuffle=False, num_workers=1, collate_fn=lambda x: x )
 
 num_batches = len(valloader)
 print(f"val loader num batches {num_batches}")
@@ -58,16 +58,23 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 print(device)
 
+p_wct = PhotoWCT()
+p_wct.load_state_dict(torch.load('/scratch/mc8895/FastPhotoStyle/PhotoWCTModels/photo_wct.pth'))
+encoders = [p_wct.e1.to(device), p_wct.e2.to(device), p_wct.e3.to(device), p_wct.e4.to(device)]
+# decoders = [p_wct.d1.to(device), p_wct.d2.to(device), p_wct.d3.to(device), p_wct.d4.to(device)]
+
 #encoder is pertrained
-encoder = VGGEncoder(level=num_layers)
-encoder.load_state_dict(torch.load("vgg16-397923af.pth"), strict=False)
+# encoder = VGGEncoder(level=num_layers)
+# encoder.load_state_dict(torch.load("vgg16-397923af.pth"), strict=False)
+encoder = encoders[num_layers-1]
 for p in encoder.parameters():
-        p.requires_grad = False
-        encoder.train(False)
-        encoder.eval()
+    p.requires_grad = False
+encoder.train(False)
+encoder.eval()
 encoder.to(device)
 
 decoder = VGGDecoder(level=num_layers).to(device)
+# decoder = decoders[num_layers-1].to(device)
 
 print(encoder)
 print(decoder)
@@ -110,7 +117,7 @@ for epoch in range(args.epoch):  # loop over the dataset multiple times
 
         # print statistics
         running_loss += loss.item()
-        if i % 400 == 0:    # print every 2000 mini-batches
+        if i % 1000 == 0:    # print every 2000 mini-batches
             print('[%d, %5d] loss: %.7f' %
                   (epoch + 1, i + 1, running_loss / 400))
             running_loss = 0.0

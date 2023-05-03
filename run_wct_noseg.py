@@ -24,6 +24,7 @@ parser.add_argument('--content', type=str, default=None,
 parser.add_argument('--output', type=str, default='stylized.png',
                     help='Output image path')
 parser.add_argument('--smooth', type=str, help='apply gif smoothing or mat transform')
+parser.add_argument('--encoder', type=int, help='options for encoders: 1: vgg-16 encoder; 2: FastphotoStyle encoder')
 
 args = parser.parse_args()
 
@@ -65,37 +66,38 @@ encoders = []
 decoders = []
 
 
-
 # Testing for FastPhoto Style Official pth migration
 p_wct = PhotoWCT()
 p_wct.load_state_dict(torch.load('/scratch/mc8895/FastPhotoStyle/PhotoWCTModels/photo_wct.pth'))
-encoders = [p_wct.e1.to(device), p_wct.e2.to(device), p_wct.e3.to(device), p_wct.e4.to(device)]
-decoders = [p_wct.d1.to(device), p_wct.d2.to(device), p_wct.d3.to(device), p_wct.d4.to(device)]
-# for i in range(args.x):
-#     encoder = VGGEncoder(level=i+1)
-#     encoder.load_state_dict(torch.load("vgg19-dcbb9e9d.pth"), strict=False)
-#     for p in encoder.parameters():
-#             p.requires_grad = False
-#             print(p.data)
-#             encoder.train(False)
-#             encoder.eval()
-#             break
-#     encoder.to(device)
-#     encoders.append(encoder)
-    # print(encoder)
-
+encoders_pwct = [p_wct.e1.to(device), p_wct.e2.to(device), p_wct.e3.to(device), p_wct.e4.to(device)]
+# decoders = [p_wct.d1.to(device), p_wct.d2.to(device), p_wct.d3.to(device), p_wct.d4.to(device)]
+for i in range(args.x):
+    encoder = VGGEncoder(level=i+1)
+    if args.encoder == 1: #vgg19
+        encoder.load_state_dict(torch.load("vgg16-397923af.pth"), strict=False)
+    if args.encoder == 2: #fastphotostyle pth
+        encoder = encoders_pwct[i]
+    for p in encoder.parameters():
+        p.requires_grad = False
+        # print(p.data)
     
+    encoder.train(False)
+    encoder.eval()
+    encoder.to(device)
+    encoders.append(encoder)
+
+
     # print(torch.load(decoder_paths[i]).keys())
-    # decoder = VGGDecoder(level=i+1).to(device)
-    # #load in saved decoder path
-    # decoder.load_state_dict(torch.load(decoder_paths[i]))
-    # for p in decoder.parameters():
-    #     p.requires_grad = False
-    #     decoder.train(False)
-    #     decoder.eval()
-    # decoder.to(device)
-    # # print(decoder)
-    # decoders.append(decoder)
+    decoder = VGGDecoder(level=i+1).to(device)
+    #load in saved decoder path
+    decoder.load_state_dict(torch.load(decoder_paths[i]))
+    for p in decoder.parameters():
+        p.requires_grad = False
+        decoder.train(False)
+        decoder.eval()
+    decoder.to(device)
+    # print(decoder)
+    decoders.append(decoder)
 
 
 
@@ -108,7 +110,6 @@ for j in range(args.x, 0, -1):
     sF, _, _, _, _, _, _ = encoders[j-1](style_image)
     
     # z_style, _ = encoders[j-1](style_image) # (1, C, H, W)
-
     n_channels = cF.size()[1] # C
     n_1 = cF.size()[2] # H
     n_2 = cF.size()[3] # W
@@ -138,7 +139,7 @@ new_image = torch.transpose(new_image, 0, 1) # (H, C, W)
 new_image = torch.transpose(new_image, 1, 2) # (H, W, C)
 
 new_image = np.maximum(np.minimum(new_image.cpu().detach().numpy(), 1.0), 0.0)
-# print(new_image)
+
 result = Image.fromarray((new_image * 255).astype(np.uint8))
 result.save(args.output + '.png')
 
