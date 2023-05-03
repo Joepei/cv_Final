@@ -97,7 +97,7 @@ for i in range(args.x):
 
 def compute_label_info(cont_seg, styl_seg):
     if cont_seg.size == False or styl_seg.size == False:
-        return
+        return None, None
     # print('content seg size', cont_seg)
     max_label = np.max(cont_seg) + 1
     label_set = np.unique(cont_seg)
@@ -224,21 +224,23 @@ style_image = image_loader(transform, args.style)
 _, _, ccw, cch = content_image.shape
 _, _, ssw, ssh = style_image.shape
 
+try:
+    content_seg = Image.open(args.content_seg)
+    content_seg = np.asarray(content_seg)
+    style_seg = Image.open(args.style_seg)
+    style_seg = np.asarray(style_seg)
+    # the black and white segementation is werid 
+    # the following code is for that mask
+    if content_seg.ndim == 3:
+        content_seg = np.asarray(content_seg[:ccw, :cch, -1])
+        style_seg = np.asarray(style_seg[:ssw, :ssh, -1])
+    else: 
+        content_seg = np.asarray(content_seg[:ccw, :cch])
+        style_seg = np.asarray(style_seg[:ssw, :ssh])
+except:
+    content_seg = np.array([])
+    style_seg = np.array([])
 
-
-content_seg = Image.open(args.content_seg)
-content_seg = np.asarray(content_seg)
-style_seg = Image.open(args.style_seg)
-style_seg = np.asarray(style_seg)
-
-# the black and white segementation is werid 
-# the following code is for that mask
-if content_seg.ndim == 3:
-    content_seg = np.asarray(content_seg[:ccw, :cch, -1])
-    style_seg = np.asarray(style_seg[:ssw, :ssh, -1])
-else: 
-    content_seg = np.asarray(content_seg[:ccw, :cch])
-    style_seg = np.asarray(style_seg[:ssw, :ssh])
 
 # style_seg
 # debugging purpose
