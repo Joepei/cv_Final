@@ -87,14 +87,33 @@ for i in range(args.x):
     decoder.to(device)
     decoders.append(decoder)
 
-def wct_core(cont_feat, styl_feat):
+def compute_label_info(cont_seg, styl_seg):
+    if cont_seg.size == False or styl_seg.size == False:
+        return
+    # print('content seg size', cont_seg)
+    max_label = np.max(cont_seg) + 1
+    label_set = np.unique(cont_seg)
+    label_indicator = np.zeros(max_label)
+    for l in label_set:
+        # if l==0:
+        #   continue
+        is_valid = lambda a, b: a > 10 and b > 10 and a / b < 100 and b / a < 100
+        o_cont_mask = np.where(cont_seg.reshape(cont_seg.shape[0] * cont_seg.shape[1]) == l)
+        o_styl_mask = np.where(styl_seg.reshape(styl_seg.shape[0] * styl_seg.shape[1]) == l)
+        label_indicator[l] = is_valid(o_cont_mask[0].size, o_styl_mask[0].size)
+    
+    return label_set, label_indicator
+
+
+def __wct_core(cont_feat, styl_feat):
     cFSize = cont_feat.size()
     c_mean = torch.mean(cont_feat, 1)  # c x (h x w)
     c_mean = c_mean.unsqueeze(1).expand_as(cont_feat)
     cont_feat = cont_feat - c_mean
     
     iden = torch.eye(cFSize[0])  # .double()
-    # iden = iden.cuda()
+    # if self.is_cuda:
+    iden = iden.cuda()
     
     contentConv = torch.mm(cont_feat, cont_feat.t()).div(cFSize[1] - 1) + iden
     # print(contentConv)
@@ -102,7 +121,6 @@ def wct_core(cont_feat, styl_feat):
 
     # Replace non-finite values with a specified value (e.g., 0)
     contentConv[has_non_finite] = 0.000001
-    
     # del iden
     c_u, c_e, c_v = torch.svd(contentConv, some=False)
     # c_e2, c_v = torch.eig(contentConv, True)
@@ -118,10 +136,10 @@ def wct_core(cont_feat, styl_feat):
     s_mean = torch.mean(styl_feat, 1)
     styl_feat = styl_feat - s_mean.unsqueeze(1).expand_as(styl_feat)
     styleConv = torch.mm(styl_feat, styl_feat.t()).div(sFSize[1] - 1)
+
     has_non_finite = torch.isnan(styleConv) | torch.isinf(styleConv)
     # Replace non-finite values with a specified value (e.g., 0)
     styleConv[has_non_finite] = 0.000001
-    # print(styleConv)
     s_u, s_e, s_v = torch.svd(styleConv, some=False)
     
     k_s = sFSize[0]
@@ -140,32 +158,14 @@ def wct_core(cont_feat, styl_feat):
     targetFeature = targetFeature + s_mean.unsqueeze(1).expand_as(targetFeature)
     return targetFeature
 
-def compute_label_info(cont_seg, styl_seg):
-    if cont_seg.size == False or styl_seg.size == False:
-        return
-    # print('content seg size', cont_seg)
-    max_label = np.max(cont_seg) + 1
-    label_set = np.unique(cont_seg)
-    label_indicator = np.zeros(max_label)
-    for l in label_set:
-        # if l==0:
-        #   continue
-        is_valid = lambda a, b: a > 10 and b > 10 and a / b < 100 and b / a < 100
-        o_cont_mask = np.where(cont_seg.reshape(cont_seg.shape[0] * cont_seg.shape[1]) == l)
-        o_styl_mask = np.where(styl_seg.reshape(styl_seg.shape[0] * styl_seg.shape[1]) == l)
-        label_indicator[l] = is_valid(o_cont_mask[0].size, o_styl_mask[0].size)
-    
-    return label_set, label_indicator
-
-def feature_wct(cont_feat, styl_feat, cont_seg, styl_seg, label_set, label_indicator):
-
+def __feature_wct(cont_feat, styl_feat, cont_seg, styl_seg, label_set, label_indicator):
     cont_c, cont_h, cont_w = cont_feat.size(0), cont_feat.size(1), cont_feat.size(2)
     styl_c, styl_h, styl_w = styl_feat.size(0), styl_feat.size(1), styl_feat.size(2)
     cont_feat_view = cont_feat.view(cont_c, -1).clone()
     styl_feat_view = styl_feat.view(styl_c, -1).clone()
 
     if cont_seg.size == False or styl_seg.size == False:
-        target_feature = wct_core(cont_feat_view, styl_feat_view)
+        target_feature = __wct_core(cont_feat_view, styl_feat_view)
     else:
         target_feature = cont_feat.view(cont_c, -1).clone()
         if len(cont_seg.shape) == 2:
@@ -187,15 +187,15 @@ def feature_wct(cont_feat, styl_feat, cont_seg, styl_seg, label_set, label_indic
 
             cont_indi = torch.LongTensor(cont_mask[0])
             styl_indi = torch.LongTensor(styl_mask[0])
-            
-            # cont_indi = cont_indi.cuda(0)
-            # styl_indi = styl_indi.cuda(0)
+            # if self.is_cuda:
+            cont_indi = cont_indi.cuda(0)
+            styl_indi = styl_indi.cuda(0)
 
             cFFG = torch.index_select(cont_feat_view, 1, cont_indi)
             sFFG = torch.index_select(styl_feat_view, 1, styl_indi)
             # print(len(cont_indi))
             # print(len(styl_indi))
-            tmp_target_feature = wct_core(cFFG, sFFG)
+            tmp_target_feature = __wct_core(cFFG, sFFG)
             # print(tmp_target_feature.size())
             if torch.__version__ >= "0.4.0":
                 # This seems to be a bug in PyTorch 0.4.0 to me.
@@ -211,8 +211,8 @@ def feature_wct(cont_feat, styl_feat, cont_seg, styl_seg, label_set, label_indic
     return ccsF
 
 
-content_image = image_loader(transform, args.content).to(device)
-style_image = image_loader(transform, args.style).to(device)
+content_image = image_loader(transform, args.content)
+style_image = image_loader(transform, args.style)
 _, _, ccw, cch = content_image.shape
 _, _, ssw, ssh = style_image.shape
 
@@ -247,18 +247,24 @@ print(style_seg.shape)
 label_set, label_indicator = compute_label_info(content_seg, style_seg)
 
 #output encoded matrix for encoder (layer=4) for style image
-sF4, sF3, sF2, sF1 = encoders[-1].forward_multiple(style_images)
-style_Fs = [sF4, sF3, sF2, sF1]
+# content_seg = torch.from_numpy(content_seg).float().to(device)
+# style_seg = torch.from_numpy(style_seg).float().to(device)
+
+sF4, sF3, sF2, sF1 = encoders[-1].forward_multiple(style_image.to(device))
+# style_Fs = [sF1, sF2, sF3,sF4]
 
 for j in range(args.x, 0, -1):
-    cF, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3 = encoders[j-1](content_image) # (1, C, H, W)
+    cF, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3 = encoders[j-1](content_image.to(device)) # (1, C, H, W)
     # z_style, _ = encoders[j-1](style_image) # (1, C, H, W)
-    sF = style_Fs[j-1]
+    sF, _, _, _, _, _, _ = encoders[j-1](style_image.to(device))
+    # print(cF.shape, sF.shape)
     # label_set, label_indicator = compute_label_info(content_seg, style_seg)
     # feature_wct(cont_feat, style_feat, cont_seg, styl_seg)
-    content_feat = cF.squeeze(0)
-    style_feat = sF.squeeze(0)
-    ccsF = feature_wct(content_feat, style_feat, content_seg, style_seg, label_set, label_indicator)
+    content_feat = cF.data.squeeze(0).to(device)
+    # print(content_feat.shape)
+    style_feat = sF.data.squeeze(0).to(device)
+
+    ccsF = __feature_wct(content_feat, style_feat, content_seg, style_seg, label_set, label_indicator)
     content_image = decoders[j-1](ccsF, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3) # (1, C, H, W)
 
     # n_channels = z_content.size()[1] # C
