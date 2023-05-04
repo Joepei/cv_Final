@@ -9,6 +9,8 @@ val2017/
 examples/
 figs/
 figs2/
+logs/
+outputs_automated/
 
 *.zip
 *.out

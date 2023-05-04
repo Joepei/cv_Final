@@ -30,7 +30,7 @@ parser.add_argument('--content_seg', type=str, default=None,
 parser.add_argument('--output', type=str, default='stylized.png',
                     help='Output image path')
 parser.add_argument('--smooth', type=str, help='apply gif smoothing or mat transform')
-parser.add_argument('--encoder', type=int, help='options for encoders: 1: vgg-16 encoder; 2: FastphotoStyle encoder')
+parser.add_argument('--encoder', type=int, default=2, help='options for encoders: 1: vgg-16 encoder; 2: FastphotoStyle encoder')
 
 
 args = parser.parse_args()
