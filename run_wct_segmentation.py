@@ -35,6 +35,75 @@ parser.add_argument('--encoder', type=int, help='options for encoders: 1: vgg-16
 
 args = parser.parse_args()
 
+import torchvision.models as models
+'''
+#####################################################################################
+'''
+model_urls = {
+    'vgg16': 'https://download.pytorch.org/models/vgg16-397923af.pth',
+    'vgg19': 'https://download.pytorch.org/models/vgg19-dcbb9e9d.pth'}
+# Load pre-trained VGG19 model
+# so you do not have to download model to some unknown black hole
+vgg19_model = models.vgg19(weights=None) 
+# load and then delete later
+vgg19_model.load_state_dict(torch.load("vgg19-dcbb9e9d.pth"))
+
+def load_vgg_weight(level=4, model=vgg19_model):
+    encoder = VGGEncoder(level=level)
+    conv0 = torch.tensor([[[[  0.]],
+
+            [[  0.]],
+
+            [[255.]]],
+
+
+            [[[  0.]],
+
+            [[255.]],
+
+            [[  0.]]],
+
+
+            [[[255.]],
+
+            [[  0.]],
+
+            [[  0.]]]], requires_grad=True)
+    if level == 1:
+        encoder.conv0.weight.data = conv0.data
+        encoder.conv1_1.weight.data = model.features[0].weight.data
+        return encoder
+    elif level == 2:
+        encoder.conv0.weight.data = conv0.data
+        encoder.conv1_1.weight.data = model.features[0].weight.data
+        encoder.conv1_2.weight.data = model.features[2].weight.data
+        encoder.conv2_1.weight.data = model.features[5].weight.data
+        return encoder
+    elif level == 3:
+        encoder.conv0.weight.data = conv0.data
+        encoder.conv1_1.weight.data = model.features[0].weight.data
+        encoder.conv1_2.weight.data = model.features[2].weight.data
+        encoder.conv2_1.weight.data = model.features[5].weight.data
+        encoder.conv2_2.weight.data = model.features[7].weight.data
+        encoder.conv3_1.weight.data = model.features[10].weight.data
+        return encoder
+    elif level == 4:
+        encoder.conv0.weight.data = conv0.data
+        encoder.conv1_1.weight.data = model.features[0].weight.data
+        encoder.conv1_2.weight.data = model.features[2].weight.data
+        encoder.conv2_1.weight.data = model.features[5].weight.data
+        encoder.conv2_2.weight.data = model.features[7].weight.data
+        encoder.conv3_1.weight.data = model.features[10].weight.data
+        encoder.conv3_2.weight.data = model.features[12].weight.data
+        encoder.conv3_3.weight.data = model.features[14].weight.data
+        encoder.conv3_4.weight.data = model.features[16].weight.data
+        encoder.conv4_1.weight.data = model.features[19].weight.data
+        return encoder
+    print("failed to load!!!!!!")
+    return None
+'''
+#####################################################################################
+'''
 
 def image_loader(loader, image_name):
     img = Image.open(image_name).convert("RGB")
@@ -68,13 +137,15 @@ decoder_paths = args.decoder.split(",")
 encoders = []
 decoders = []
 p_wct = PhotoWCT()
-p_wct.load_state_dict(torch.load('/scratch/mc8895/FastPhotoStyle/PhotoWCTModels/photo_wct.pth'))
+p_wct.load_state_dict(torch.load('photo_wct.pth'))
 encoders_pwct = [p_wct.e1.to(device), p_wct.e2.to(device), p_wct.e3.to(device), p_wct.e4.to(device)]
 
 for i in range(args.x):
     encoder = VGGEncoder(level=i+1)
     if args.encoder == 1:
-        encoder.load_state_dict(torch.load("vgg16-397923af.pth"), strict=False)
+        encoder = load_vgg_weight(level=i+1)
+        # encoder.load_state_dict(torch.load("vgg19-dcbb9e9d.pth"), strict=False)
+        # encoder.load_state_dict(torch.load("vgg16-397923af.pth"), strict=False)
     if args.encoder == 2:
         encoder = encoders_pwct[i]
     for p in encoder.parameters():
@@ -302,7 +373,7 @@ print(label_set)
 print(label_indicator)
 
 
-sF4, sF3, sF2, sF1 = encoders[-1].forward_multiple(style_image.to(device))
+# sF4, sF3, sF2, sF1 = encoders[-1].forward_multiple(style_image.to(device))
 
 for j in range(args.x, 0, -1):
     cF, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3 = encoders[j-1](content_image.to(device)) # (1, C, H, W)

@@ -5,6 +5,7 @@ import torch
 import torchvision
 import torchvision.transforms as transforms
 import torch.optim as optim
+import torchvision.models as models
 
 from fast_vgg16 import VGGEncoder, VGGDecoder
 from tqdm import tqdm
@@ -57,27 +58,88 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # Assuming that we are on a CUDA machine, this should print a CUDA device:
 
 print(device)
+'''
+#####################################################################################
+'''
+model_urls = {
+    'vgg16': 'https://download.pytorch.org/models/vgg16-397923af.pth',
+    'vgg19': 'https://download.pytorch.org/models/vgg19-dcbb9e9d.pth'}
+# Load pre-trained VGG19 model
+# so you do not have to download model to some unknown black hole
+vgg19_model = models.vgg19(weights=None) 
+# load and then delete later
+vgg19_model.load_state_dict(torch.load("vgg19-dcbb9e9d.pth"))
 
-p_wct = PhotoWCT()
-p_wct.load_state_dict(torch.load('/scratch/mc8895/FastPhotoStyle/PhotoWCTModels/photo_wct.pth'))
-encoders = [p_wct.e1.to(device), p_wct.e2.to(device), p_wct.e3.to(device), p_wct.e4.to(device)]
-# decoders = [p_wct.d1.to(device), p_wct.d2.to(device), p_wct.d3.to(device), p_wct.d4.to(device)]
+def load_vgg_weight(level=4, model=vgg19_model):
+    encoder = VGGEncoder(level=level)
+    conv0 = torch.tensor([[[[  0.]],
 
+            [[  0.]],
+
+            [[255.]]],
+
+
+            [[[  0.]],
+
+            [[255.]],
+
+            [[  0.]]],
+
+
+            [[[255.]],
+
+            [[  0.]],
+
+            [[  0.]]]], requires_grad=True)
+    if level == 1:
+        encoder.conv0.weight.data = conv0.data
+        encoder.conv1_1.weight.data = model.features[0].weight.data
+        return encoder
+    elif level == 2:
+        encoder.conv0.weight.data = conv0.data
+        encoder.conv1_1.weight.data = model.features[0].weight.data
+        encoder.conv1_2.weight.data = model.features[2].weight.data
+        encoder.conv2_1.weight.data = model.features[5].weight.data
+        return encoder
+    elif level == 3:
+        encoder.conv0.weight.data = conv0.data
+        encoder.conv1_1.weight.data = model.features[0].weight.data
+        encoder.conv1_2.weight.data = model.features[2].weight.data
+        encoder.conv2_1.weight.data = model.features[5].weight.data
+        encoder.conv2_2.weight.data = model.features[7].weight.data
+        encoder.conv3_1.weight.data = model.features[10].weight.data
+        return encoder
+    elif level == 4:
+        encoder.conv0.weight.data = conv0.data
+        encoder.conv1_1.weight.data = model.features[0].weight.data
+        encoder.conv1_2.weight.data = model.features[2].weight.data
+        encoder.conv2_1.weight.data = model.features[5].weight.data
+        encoder.conv2_2.weight.data = model.features[7].weight.data
+        encoder.conv3_1.weight.data = model.features[10].weight.data
+        encoder.conv3_2.weight.data = model.features[12].weight.data
+        encoder.conv3_3.weight.data = model.features[14].weight.data
+        encoder.conv3_4.weight.data = model.features[16].weight.data
+        encoder.conv4_1.weight.data = model.features[19].weight.data
+        return encoder
+    print("failed to load!!!!!!")
+    return None
+'''
+#####################################################################################
+'''
 #encoder is pertrained
-# encoder = VGGEncoder(level=num_layers)
-# encoder.load_state_dict(torch.load("vgg16-397923af.pth"), strict=False)
-encoder = encoders[num_layers-1]
+encoder = load_vgg_weight(level=num_layers, model=vgg19_model)
+
 for p in encoder.parameters():
-    p.requires_grad = False
-encoder.train(False)
-encoder.eval()
+        p.requires_grad = False
+        encoder.train(False)
+        encoder.eval()
 encoder.to(device)
 
 decoder = VGGDecoder(level=num_layers).to(device)
-# decoder = decoders[num_layers-1].to(device)
 
 print(encoder)
 print(decoder)
+
 criterion = nn.MSELoss().to(device)
 # criterion_perceptual = perceptual_loss.VGGPerceptualLoss()
 optimizer = optim.Adam(decoder.parameters(), lr=0.0001) # .to(device)
@@ -117,7 +179,7 @@ for epoch in range(args.epoch):  # loop over the dataset multiple times
 
         # print statistics
         running_loss += loss.item()
-        if i % 1000 == 0:    # print every 2000 mini-batches
+        if i % 400 == 0:    # print every 2000 mini-batches
             print('[%d, %5d] loss: %.7f' %
                   (epoch + 1, i + 1, running_loss / 400))
             running_loss = 0.0
