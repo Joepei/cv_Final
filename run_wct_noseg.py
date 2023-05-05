@@ -6,6 +6,7 @@ import torchvision
 import torchvision.transforms as transforms
 from PIL import Image
 
+import custom_vgg16 as cvgg16
 from fast_vgg16 import VGGEncoder, VGGDecoder
 import mat_transforms
 from model import PhotoWCT
@@ -24,7 +25,7 @@ parser.add_argument('--content', type=str, default=None,
 parser.add_argument('--output', type=str, default='stylized.png',
                     help='Output image path')
 parser.add_argument('--smooth', type=str, help='apply gif smoothing or mat transform')
-parser.add_argument('--encoder', type=int, help='options for encoders: 1: vgg-16 encoder; 2: FastphotoStyle encoder')
+parser.add_argument('--encoder', type=int, help='options for encoders: 1: vgg-16 encoder; 2: FastphotoStyle encoder; 3: serial encoder')
 
 args = parser.parse_args()
 
@@ -60,32 +61,35 @@ print(device)
 
 decoder_paths = args.decoder.split(",")
 
-# encoders = [cvgg16.vgg16_enc(x=j+1, pretrained=True).to(device) for j in range(args.x)]
-# decoders = [cvgg16.vgg16_dec(x=j+1, pretrained=True, pretrained_path=decoder_paths[j]).to(device) for j in range(args.x)]
+# load encoder/decoder
 encoders = []
 decoders = []
 
 
-# Testing for FastPhoto Style Official pth migration
-p_wct = PhotoWCT()
-p_wct.load_state_dict(torch.load('/scratch/mc8895/FastPhotoStyle/PhotoWCTModels/photo_wct.pth'))
-encoders_pwct = [p_wct.e1.to(device), p_wct.e2.to(device), p_wct.e3.to(device), p_wct.e4.to(device)]
-# decoders = [p_wct.d1.to(device), p_wct.d2.to(device), p_wct.d3.to(device), p_wct.d4.to(device)]
-for i in range(args.x):
-    encoder = VGGEncoder(level=i+1)
-    if args.encoder == 1: #vgg19
-        encoder.load_state_dict(torch.load("vgg16-397923af.pth"), strict=False)
-    if args.encoder == 2: #fastphotostyle pth
-        encoder = encoders_pwct[i]
-    for p in encoder.parameters():
-        p.requires_grad = False
-        # print(p.data)
-    
-    encoder.train(False)
-    encoder.eval()
-    encoder.to(device)
-    encoders.append(encoder)
+if args.encoder == 3:
+    encoders = [cvgg16.vgg16_enc(x=j+1, pretrained=True).to(device) for j in range(args.x)]
+    decoders = [cvgg16.vgg16_dec(x=j+1, pretrained=True, pretrained_path=decoder_paths[j]).to(device) for j in range(args.x)]
 
+# Testing for FastPhoto Style Official pth migration
+else: 
+    p_wct = PhotoWCT()
+    p_wct.load_state_dict(torch.load('/scratch/mc8895/FastPhotoStyle/PhotoWCTModels/photo_wct.pth'))
+    encoders_pwct = [p_wct.e1.to(device), p_wct.e2.to(device), p_wct.e3.to(device), p_wct.e4.to(device)]
+    # decoders = [p_wct.d1.to(device), p_wct.d2.to(device), p_wct.d3.to(device), p_wct.d4.to(device)]
+    for i in range(args.x):
+        encoder = VGGEncoder(level=i+1)
+        if args.encoder == 1: #vgg19
+            encoder.load_state_dict(torch.load("vgg16-397923af.pth"), strict=False)
+        if args.encoder == 2: #fastphotostyle pth
+            encoder = encoders_pwct[i]
+        for p in encoder.parameters():
+            p.requires_grad = False
+            # print(p.data)
+        
+        encoder.train(False)
+        encoder.eval()
+        encoder.to(device)
+        encoders.append(encoder)
 
     # print(torch.load(decoder_paths[i]).keys())
     decoder = VGGDecoder(level=i+1).to(device)
@@ -98,7 +102,6 @@ for i in range(args.x):
     decoder.to(device)
     # print(decoder)
     decoders.append(decoder)
-
 
 
 content_image = image_loader(transform, args.content).to(device)
