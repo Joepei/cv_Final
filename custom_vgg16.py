@@ -22,7 +22,7 @@ class VGG16_X_Enc(nn.Module):
         super(VGG16_X_Enc, self).__init__()
 
         self.features = nn.Sequential(*layers) # layers
-        print(self.features)
+        # print(self.features)
         # self.features = features
         # self.avgpool = nn.AdaptiveAvgPool2d((7, 7))
         # self.classifier = nn.Sequential(

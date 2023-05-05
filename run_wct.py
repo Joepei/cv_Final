@@ -6,10 +6,11 @@ import torchvision
 import torchvision.transforms as transforms
 from PIL import Image
 
-import custom_vgg16 as cvgg16
-from fast_vgg16 import VGGEncoder, VGGDecoder
-import mat_transforms
 from model import PhotoWCT
+from fast_vgg16 import VGGEncoder, VGGDecoder
+from core import __feature_wct, image_loader, load_segment, compute_label_info
+import custom_vgg16 as cvgg16
+import mat_transforms
 
 import argparse
 
@@ -22,25 +23,20 @@ parser.add_argument('--style', type=str, default=None,
                     help='Style image path')
 parser.add_argument('--content', type=str, default=None,
                     help='Content image path')
+
+parser.add_argument('--style_seg', type=str, default=None,
+                    help='Style image segmentation path')
+parser.add_argument('--content_seg', type=str, default=None,
+                    help='Content image segmentation path')
+
 parser.add_argument('--output', type=str, default='stylized.png',
                     help='Output image path')
 parser.add_argument('--smooth', type=str, help='apply gif smoothing or mat transform')
-parser.add_argument('--encoder', type=int, help='options for encoders: 1: vgg-16 encoder; 2: FastphotoStyle encoder; 3: serial encoder')
+parser.add_argument('--encoder', type=int, default=2, help='options for encoders: 1: vgg-16 encoder; 2: FastphotoStyle encoder; 3: serial encoder')
+
 
 args = parser.parse_args()
 
-
-
-def image_loader(loader, image_name):
-    img = Image.open(image_name).convert("RGB")
-    h, w, c = np.array(img).shape
-    h = (h//8)*8
-    w = (w//8)*8
-    img = Image.fromarray(np.array(img)[:h, :w])
-    img = loader(img).float()
-    img = img.clone().detach() # torch.tensor(image, requires_grad=True)
-    img = img.unsqueeze(0)
-    return img
 
 
 transform = transforms.Compose([
@@ -56,85 +52,90 @@ reverse_normalize = transforms.Normalize(
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # Assuming that we are on a CUDA machine, this should print a CUDA device:
-
 print(device)
-
+print(args.encoder)
 decoder_paths = args.decoder.split(",")
 
-# load encoder/decoder
 encoders = []
 decoders = []
-
-
 if args.encoder == 3:
+    print("in serial backbone")
     encoders = [cvgg16.vgg16_enc(x=j+1, pretrained=True).to(device) for j in range(args.x)]
     decoders = [cvgg16.vgg16_dec(x=j+1, pretrained=True, pretrained_path=decoder_paths[j]).to(device) for j in range(args.x)]
-
-# Testing for FastPhoto Style Official pth migration
 else: 
+    print("in fast backbone")
     p_wct = PhotoWCT()
     p_wct.load_state_dict(torch.load('/scratch/mc8895/FastPhotoStyle/PhotoWCTModels/photo_wct.pth'))
     encoders_pwct = [p_wct.e1.to(device), p_wct.e2.to(device), p_wct.e3.to(device), p_wct.e4.to(device)]
-    # decoders = [p_wct.d1.to(device), p_wct.d2.to(device), p_wct.d3.to(device), p_wct.d4.to(device)]
+
     for i in range(args.x):
         encoder = VGGEncoder(level=i+1)
-        if args.encoder == 1: #vgg19
+        if args.encoder == 1:
             encoder.load_state_dict(torch.load("vgg16-397923af.pth"), strict=False)
-        if args.encoder == 2: #fastphotostyle pth
+        if args.encoder == 2:
             encoder = encoders_pwct[i]
         for p in encoder.parameters():
             p.requires_grad = False
-            # print(p.data)
         
         encoder.train(False)
         encoder.eval()
         encoder.to(device)
         encoders.append(encoder)
-
-    # print(torch.load(decoder_paths[i]).keys())
-    decoder = VGGDecoder(level=i+1).to(device)
-    #load in saved decoder path
-    decoder.load_state_dict(torch.load(decoder_paths[i]))
-    for p in decoder.parameters():
-        p.requires_grad = False
-        decoder.train(False)
-        decoder.eval()
-    decoder.to(device)
-    # print(decoder)
-    decoders.append(decoder)
-
+        
+        decoder = VGGDecoder(level=i+1).to(device)
+        #load in saved decoder path
+        decoder.load_state_dict(torch.load(decoder_paths[i]))
+        for p in decoder.parameters():
+            p.requires_grad = False
+            decoder.train(False)
+            decoder.eval()
+        decoder.to(device)
+        decoders.append(decoder)
 
 content_image = image_loader(transform, args.content).to(device)
 style_image = image_loader(transform, args.style).to(device)
+_, _, ccw, cch = content_image.shape
+_, _, ssw, ssh = style_image.shape
+
+content_seg = load_segment(args.content_seg)
+style_seg = load_segment(args.style_seg) 
+
+
+print(content_image.shape)
+print(content_seg.shape)
+
+print(style_image.shape)
+print(style_seg.shape)
+
+
+label_set, label_indicator = compute_label_info(content_seg, style_seg)
+print("label contnet")
+print(label_set)
+print(label_indicator)
+
+
 
 for j in range(args.x, 0, -1):
-    # z_content, maxpool_content = encoders[j-1](content_image) # (1, C, H, W)
-    cF, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3 = encoders[j-1](content_image)
-    sF, _, _, _, _, _, _ = encoders[j-1](style_image)
-    
-    # z_style, _ = encoders[j-1](style_image) # (1, C, H, W)
-    n_channels = cF.size()[1] # C
-    n_1 = cF.size()[2] # H
-    n_2 = cF.size()[3] # W
-    print(n_channels, n_1, n_2)
 
-    z_content = cF.squeeze(0).view([n_channels, -1]) # (C, HW)
-    z_style = sF.squeeze(0).view([n_channels, -1]) # (C, HW)
-    print("z_content", z_content.shape)
-    print("z_style", z_style.shape)
-    white_content = mat_transforms.whitening(z_content) # (C, HW)
-    color_content = mat_transforms.colouring(z_style, white_content) # (C, HW)
-    print("white_content", white_content.shape)
-    print("color_content", color_content.shape)
+    if args.encoder != 3:
+        cF, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3 = encoders[j-1](content_image.to(device)) # (1, C, H, W)
+        # z_style, _ = encoders[j-1](style_image) # (1, C, H, W)
+        sF, _, _, _, _, _, _ = encoders[j-1](style_image.to(device))
+        content_feat = cF.data.squeeze(0).to(device)
+        style_feat = sF.data.squeeze(0).to(device)
 
-    alpha = 0.8
-    color_content = alpha*color_content + (1.-alpha)*z_content
+        ccsF = __feature_wct(content_feat, style_feat, content_seg, style_seg, label_set, label_indicator, device)
+        content_image = decoders[j-1](ccsF, cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3) # (1, C, H, W)
 
-    color_content = color_content.view([1, n_channels, n_1, n_2]) # (1, C, H, W)
-    print(color_content.shape)
-    # color_content = color_content.unsqueeze(0) # (1, C, H, W)
+    else:
 
-    content_image = decoders[j-1](color_content.to(device), cpool_idx, cpool1, cpool_idx2, cpool2, cpool_idx3, cpool3) # (1, C, H, W)
+        z_content, maxpool_content = encoders[j-1](content_image.to(device))
+        z_style, _ = encoders[j-1](style_image)
+        content_feat = z_content.data.squeeze(0).to(device)
+        style_feat = z_style.data.squeeze(0).to(device)
+        ccsF = __feature_wct(content_feat, style_feat, content_seg, style_seg, label_set, label_indicator, device)
+        content_image = decoders[j-1](ccsF.to(device), maxpool_content)
+
 
 new_image = content_image.squeeze(0) # (C, H, W)
 new_image = reverse_normalize(new_image) # (C, H, W)
@@ -154,3 +155,4 @@ elif args.smooth and args.smooth == "gif":
     p_pro = GIFSmoothing(r=35, eps=0.001)
     result = p_pro.process(args.output+".png", args.content)
     result.save(args.output+"_smooth_gif.png")
+
