@@ -130,9 +130,9 @@ def load_vgg_weight(level=4, model=vgg19_model):
 encoder = load_vgg_weight(level=num_layers, model=vgg19_model)
 
 for p in encoder.parameters():
-        p.requires_grad = False
-        encoder.train(False)
-        encoder.eval()
+    p.requires_grad = False
+    encoder.train(False)
+    encoder.eval()
 encoder.to(device)
 
 decoder = VGGDecoder(level=num_layers).to(device)
