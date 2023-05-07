@@ -8,10 +8,10 @@ The original implementation of [Universal Style Transfer](https://github.com/Yij
 
 ## How to run it
 1. Download the decoders from the directories
-2. For no segmentation ```python3 run_wct_noseg.py --x 4 --style <path to style> --content <path to content> --output <output file name> --decoder decoder_1/dec_gi1849.pkl,decoder_2/dec_1849.pkl,decoder_3/dec_1849.pkl,decoder_4/dec_1849.pkl --smooth gif --encoder 2```
+2. For no segmentation ```python3 run_wct.py --x 4 --style <path to style> --content <path to content> --output <output file name> --decoder decoder_1/dec_gi1849.pkl,decoder_2/dec_1849.pkl,decoder_3/dec_1849.pkl,decoder_4/dec_1849.pkl --smooth gif --encoder 2```
  
 3. for segmentation file: 
-    ```python3 run_wct_segmentation.py --x 4 --style examples/style/in34.png  --content examples/content/in34.png --style_seg examples/style_segment/in34.png  --content_seg examples/content_segment/in34.png --output outputs/in34 --decoder decoder_10epoch/dec_1_18490.pkl,decoder_10epoch/dec_2_18490.pkl,decoder_10epoch/dec_3_18490.pkl,decoder_10epoch/dec_4_18490.pkl --smooth gif --encoder=2```
+    ```python3 run_wct.py --x 4 --style examples/style/in34.png  --content examples/content/in34.png --style_seg examples/style_segment/in34.png  --content_seg examples/content_segment/in34.png --output outputs/in34 --decoder decoder_10epoch/dec_1_18490.pkl,decoder_10epoch/dec_2_18490.pkl,decoder_10epoch/dec_3_18490.pkl,decoder_10epoch/dec_4_18490.pkl --smooth gif --encoder=2```
 
        - note that prompt `encoder=2` means that we use FastPhotoStyle's official saved pth's encoder to transfer photo. Note to change the pth file location in inference file (`run_wct_segmentation` or `run_wct_noseg`). 
 
